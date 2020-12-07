@@ -8,6 +8,8 @@ import (
 )
 
 const INITIAL_COUNT int = 0
+const DEFAULT_CAPACITY int = 10
+const DEFAULT_REFRESH = time.Second * 2
 
 type User struct {
   ip string
@@ -24,7 +26,7 @@ func (b Bucket) Throttle(ip string) bool {
     user := b.users[ip]
     user.count++
     b.users[ip] = user
-    if user.count >= 100 {
+    if user.count >= b.capacity {
       return false
     }
   } else {
@@ -78,14 +80,14 @@ func scheduler(tick time.Duration, bucket *Bucket) {
 
 func main() {
   users := make(map[string]User)
-  capacity := 100
+  capacity := DEFAULT_CAPACITY
 
   bucket := &Bucket { users, capacity }
   
   mux := http.NewServeMux()
   mux.Handle("/", handler(bucket))
   
-  go scheduler(1 * time.Second, bucket)
+  go scheduler(DEFAULT_REFRESH, bucket)
   http.ListenAndServe(":8090", mux)
 }
 
