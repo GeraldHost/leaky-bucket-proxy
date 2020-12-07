@@ -5,11 +5,11 @@ import (
     "net/http"
     "time"
     "errors"
+    "os"
+    "strconv"
 )
 
 const INITIAL_COUNT int = 0
-const DEFAULT_CAPACITY int = 10
-const DEFAULT_REFRESH = time.Second * 2
 
 type User struct {
   ip string
@@ -22,11 +22,8 @@ type Bucket struct {
 }
 
 func (b Bucket) Throttle(ip string) bool {
-  if _, ok := b.users[ip]; ok {
-    user := b.users[ip]
-    if v := user.count+1; v > b.capacity {
-      user.count = b.capacity
-    } else {
+  if user, ok := b.users[ip]; ok {
+    if !(user.count >= b.capacity) {
       user.count++
     }
     b.users[ip] = user
@@ -34,13 +31,6 @@ func (b Bucket) Throttle(ip string) bool {
     b.users[ip] = User { ip: ip, count: INITIAL_COUNT }
   }
   return b.users[ip].count >= b.capacity 
-}
-
-func (b Bucket) User(ip string) (User, error) {
-  if user, ok := b.users[ip]; ok {
-    return user, nil
-  }
-  return User{}, errors.New("User not found")
 }
 
 func (b Bucket) Fill() {
@@ -58,7 +48,6 @@ func handler(bucket *Bucket) http.Handler {
   return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
     ip := req.RemoteAddr
     throttled := bucket.Throttle(ip)
-
     if !throttled {
       fmt.Fprint(w, "Welcome to the website")
     } else {
@@ -79,16 +68,29 @@ func scheduler(tick time.Duration, bucket *Bucket) {
   }
 }
 
-func main() {
-  users := make(map[string]User)
-  capacity := DEFAULT_CAPACITY
+func parseArgs() (int, int, error) {
+  if len(os.Args) < 3 {
+    return 0, 0, errors.New("Not enough args")
+  }
+  capacity, e1 := strconv.Atoi(os.Args[1])
+  refresh, e2 := strconv.Atoi(os.Args[2])
+  if e1 != nil || e2 != nil {
+    return 0, 0, errors.New("Please provide numbers")
+  }
+  return capacity, refresh, nil
+}
 
+func main() {
+  capacity, refreshSeconds, err := parseArgs()
+  if err != nil {
+    fmt.Println(err)
+    return
+  }
+  users := make(map[string]User)
   bucket := &Bucket { users, capacity }
-  
   mux := http.NewServeMux()
   mux.Handle("/", handler(bucket))
-  
-  go scheduler(DEFAULT_REFRESH, bucket)
+  go scheduler(time.Duration(refreshSeconds) * time.Second, bucket)
   http.ListenAndServe(":8090", mux)
 }
 
