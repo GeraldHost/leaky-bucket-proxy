@@ -3,6 +3,7 @@ package main
 import (
     "fmt"
     "net/http"
+    "net/http/httputil"
     "time"
     "errors"
     "os"
@@ -68,24 +69,26 @@ func scheduler(tick time.Duration, bucket *Bucket) {
   }
 }
 
-func parseArgs() (int, int, error) {
-  if len(os.Args) < 3 {
-    return 0, 0, errors.New("Not enough args")
+func parseArgs() (int, int, string, error) {
+  if len(os.Args) < 4 {
+    return 0, 0, "", errors.New("Not enough args")
   }
   capacity, e1 := strconv.Atoi(os.Args[1])
   refresh, e2 := strconv.Atoi(os.Args[2])
   if e1 != nil || e2 != nil {
-    return 0, 0, errors.New("Please provide numbers")
+    return 0, 0, "", errors.New("Please provide numbers")
   }
-  return capacity, refresh, nil
+  return capacity, refresh, os.Args[3], nil
 }
 
 func main() {
-  capacity, refreshSeconds, err := parseArgs()
+  capacity, refreshSeconds, remote, err := parseArgs()
   if err != nil {
     fmt.Println(err)
     return
   }
+  // WIP
+  proxy := httputil.NewSingleHostReverseProxy(remote)
   users := make(map[string]User)
   bucket := &Bucket { users, capacity }
   mux := http.NewServeMux()
