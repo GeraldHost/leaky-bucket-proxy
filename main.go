@@ -4,8 +4,8 @@ import (
     "fmt"
     "net/http"
     "net/http/httputil"
+    "net/url"
     "time"
-    "errors"
     "os"
     "strconv"
 )
@@ -45,14 +45,14 @@ func (b Bucket) Fill() {
   }
 }
 
-func handler(bucket *Bucket) http.Handler { 
-  return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+func handler(bucket *Bucket, proxy *httputil.ReverseProxy) http.Handler { 
+  return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
     ip := req.RemoteAddr
     throttled := bucket.Throttle(ip)
     if !throttled {
-      fmt.Fprint(w, "Welcome to the website")
+      proxy.ServeHTTP(res, req)
     } else {
-      fmt.Fprint(w, "You have made too many requests")
+      fmt.Fprint(res, "You have made too many requests")
     }
   })
 }
@@ -69,30 +69,21 @@ func scheduler(tick time.Duration, bucket *Bucket) {
   }
 }
 
-func parseArgs() (int, int, string, error) {
-  if len(os.Args) < 4 {
-    return 0, 0, "", errors.New("Not enough args")
-  }
-  capacity, e1 := strconv.Atoi(os.Args[1])
-  refresh, e2 := strconv.Atoi(os.Args[2])
-  if e1 != nil || e2 != nil {
-    return 0, 0, "", errors.New("Please provide numbers")
-  }
-  return capacity, refresh, os.Args[3], nil
+func parseArgs() (int, int, *url.URL) {
+  capacity, _ := strconv.Atoi(os.Args[1])
+  refresh, _ := strconv.Atoi(os.Args[2])
+
+  forwardUrl, _ := url.Parse(os.Args[3])
+  return capacity, refresh, forwardUrl
 }
 
 func main() {
-  capacity, refreshSeconds, remote, err := parseArgs()
-  if err != nil {
-    fmt.Println(err)
-    return
-  }
-  // WIP
-  proxy := httputil.NewSingleHostReverseProxy(remote)
+  capacity, refreshSeconds, forwardUrl := parseArgs()
+  proxy := httputil.NewSingleHostReverseProxy(forwardUrl)
   users := make(map[string]User)
   bucket := &Bucket { users, capacity }
   mux := http.NewServeMux()
-  mux.Handle("/", handler(bucket))
+  mux.Handle("/", handler(bucket, proxy))
   go scheduler(time.Duration(refreshSeconds) * time.Second, bucket)
   http.ListenAndServe(":8090", mux)
 }
