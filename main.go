@@ -26,13 +26,10 @@ func (b Bucket) Throttle(ip string) bool {
     user := b.users[ip]
     user.count++
     b.users[ip] = user
-    if user.count >= b.capacity {
-      return false
-    }
   } else {
     b.users[ip] = User { ip: ip, count: INITIAL_COUNT }
   }
-  return true
+  return b.users[ip].count >= b.capacity 
 }
 
 func (b Bucket) User(ip string) (User, error) {
@@ -56,9 +53,9 @@ func (b Bucket) Fill() {
 func handler(bucket *Bucket) http.Handler { 
   return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
     ip := req.RemoteAddr
-    allowed := bucket.Throttle(ip)
+    throttled := bucket.Throttle(ip)
 
-    if allowed {
+    if !throttled {
       fmt.Fprint(w, "Welcome to the website")
     } else {
       fmt.Fprint(w, "You have made too many requests")
