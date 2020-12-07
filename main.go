@@ -24,7 +24,7 @@ type Bucket struct {
 func (b Bucket) Throttle(ip string) bool {
   if _, ok := b.users[ip]; ok {
     user := b.users[ip]
-    if v := user.count+1; v >= b.capacity {
+    if v := user.count+1; v > b.capacity {
       user.count = b.capacity
     } else {
       user.count++
